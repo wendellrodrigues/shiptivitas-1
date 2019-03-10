@@ -2,6 +2,7 @@ import React from 'react';
 import './Card.css';
 
 export default class Card extends React.Component {
+  
   render() {
     let className = ['Card'];
     if (this.props.status === 'backlog') {

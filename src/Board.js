@@ -1,13 +1,15 @@
 import React from 'react';
-import Dragula from 'dragula';
 import 'dragula/dist/dragula.css';
 import Swimlane from './Swimlane';
 import './Board.css';
+
+const Dragula = require('dragula');
 
 export default class Board extends React.Component {
   constructor(props) {
     super(props);
     const clients = this.getClients();
+    
     this.state = {
       clients: {
         backlog: clients.filter(client => !client.status || client.status === 'backlog'),
@@ -16,9 +18,7 @@ export default class Board extends React.Component {
       }
     };
 
-
-    //this.dragulaDecorator = this.dragulaDecorator.bind(this); //Binds the changes made by dragula
-
+    this.dragulaDecorator = this.dragulaDecorator.bind(this); //Binds the changes made by dragula
 
     this.swimlanes = {
       backlog: React.createRef(),
@@ -27,45 +27,91 @@ export default class Board extends React.Component {
     }
 
   }
-
+/**
+ * When page loads, this function fires
+ */
   componentDidMount () {
     const referencedArray = [ 
       this.swimlanes.backlog.current, 
       this.swimlanes.inProgress.current,
       this.swimlanes.complete.current
     ]
-    this.dragulaDecorator(referencedArray);
-    
+    this.dragulaDecorator(referencedArray);  
   };
 
-  componentDidUpdate(prevProps, prevState){
-    if(this.state.foo !== prevState.foo){
-      console.log('FOO')
-    } 
+
+  /**
+   * Finds position of a value in an array by checking its Id
+   * @param {Array} array 
+   * @param {Number} id 
+   */
+  findPosition(array, id) {
+    let pos = null;
+    for(let i=0; i<array.length; i++){
+      if(array[i].id === id){
+         pos = i;
+      }
+    }
+    return pos;
   }
 
-  onChange(e) {
-    console.log('onchangee', e)
+  /**
+   * Alters the swimlane. Takes card from one swimlane, deletes it, and moves it to target swimlane
+   * Also handles moving cards within the swimlane (sourceLane == targetLane )
+   * @param {Array} sourceLane    The source lane to delete from
+   * @param {Array} targetLane    The target lane to add to
+   * @param {Number} sourceID     The position of the source to be deleted
+   * @param {Number} siblingID    The position of the sibling to move card to (before)
+   * @param {Object} movedClient  The card to move
+   */
+  alterSwimLanes(sourceLane, targetLane, sourceID, siblingID, movedClient) {
+
+    //Create insert function
+    Array.prototype.insert = function ( index, item ) {
+      this.splice( index, 0, item );
+    };
+
+    //Find position in source to delete
+    const posToDelete = this.findPosition(sourceLane, sourceID);
+    //Delete from source lane
+    sourceLane.splice(posToDelete, 1);
+    //Find position to insert into
+    let posToInsert = this.findPosition(targetLane, siblingID);
+    //Handles corner case of inserting at the end of an array (no sibling) / Received from dragulaDecorator
+    if(posToInsert === null) posToInsert = siblingID
+    //Insert into target swimlane
+    targetLane.insert(posToInsert, movedClient);
   }
 
+  /**
+   * The drag-and-drop feature
+   * Sets state based on moving items around in the swimlanes or between swimlanes
+   * @param {Object} componentBackingInstance 
+   */
+ dragulaDecorator(componentBackingInstance) {
 
-  async dragulaDecorator(componentBackingInstance) {
-
-    
-    console.log('state before', this.state);
+    const drake = Dragula(componentBackingInstance)
 
     if (componentBackingInstance) {
-      let options = { };
-      Dragula(componentBackingInstance, options).on('drop',(el, target, source, sibling) => {
-
+      drake.on('drop',(el, target, source, sibling) => {
         console.log('element', el);
+        console.log('drake', drake);
 
-        //const sourceID = source.id;   //This is the source column ID
+        let   sourceID = source.id;   //This is the source column ID
         let   targetID = target.id;   //This is the target column ID
         const movedId = el.id;        //This is the id of the element to be moved
-        //const siblingId = sibling.id  //This is the sibling ID (card after where card was moved to)
+       
+        let siblingId = 0;
+        
+        //Handle case if siblingId is out of bounds (replaces posToInsert in alterSwimLanes())
+        const thisTarget = this.state.clients[targetID];
+        if(sibling){
+          siblingId = sibling.id
+        } else {
+          siblingId = thisTarget.length;
+        }
 
-
+        
         //Get client array and position of the card to move
         const clientsArray = this.getClients();
         const clientPos = movedId-1;
@@ -73,26 +119,76 @@ export default class Board extends React.Component {
         //Get card
         const movedClient = clientsArray[clientPos];
 
-
         //Changes 'inProgress' to 'in-progress'
-        if (targetID === 'inProgress'){
-          targetID = 'in-progress'
-        }
+        if(targetID === 'inProgress') targetID = 'in-progress';
+        if(sourceID === 'inProgress') sourceID = 'in-progress'
 
         //Changes status of the movedCient 
         movedClient.status = targetID;
 
-        console.log('el', el.className);
-        
+        const thisBacklog = this.state.clients.backlog;
+        const thisInProgress = this.state.clients.inProgress;
+        const thisComplete = this.state.clients.complete;
 
-        //Set the state 
+        //Backlog -> In-Progress
+        if( sourceID === 'backlog' && targetID === 'in-progress'){
+          this.alterSwimLanes(thisBacklog, thisInProgress, movedId, siblingId, movedClient);
+        }
+
+        //Backlog -> Complete
+        if(sourceID === 'backlog' && targetID === 'complete'){
+          this.alterSwimLanes(thisBacklog, thisComplete, movedId, siblingId, movedClient);
+        }
+
+        //In-Progress -> Backlog
+        if(sourceID === 'in-progress' && targetID === 'backlog'){
+          this.alterSwimLanes(thisInProgress, thisBacklog, movedId, siblingId, movedClient);
+        }
+
+        //In-Progress -> Complete
+        if(sourceID === 'in-progress' && targetID === 'complete'){
+          this.alterSwimLanes(thisInProgress, thisComplete, movedId, siblingId, movedClient);
+        }
+
+        //Complete -> Backlog
+        if(sourceID === 'complete' && targetID === 'backlog'){
+          this.alterSwimLanes(thisComplete, thisBacklog, movedId, siblingId, movedClient);
+        }
+
+        //Complete -> In-Progress
+        if(sourceID === 'complete' && targetID === 'in-progress'){
+          this.alterSwimLanes(thisComplete, thisInProgress, movedId, siblingId, movedClient);
+        }
+
+        //Backlog -> Backlog
+        if( sourceID === 'backlog' && targetID === 'backlog'){
+          this.alterSwimLanes(thisBacklog, thisBacklog, movedId, siblingId, movedClient);
+        }
+
+        //In-Progress -> In-Progress
+        if( sourceID === 'in-progress' && targetID === 'in-progress'){
+          this.alterSwimLanes(thisInProgress, thisInProgress, movedId, siblingId, movedClient);
+        }
+
+        //Complete -> Complete
+        if( sourceID === 'complete' && targetID === 'complete'){
+          this.alterSwimLanes(thisComplete, thisComplete, movedId, siblingId, movedClient);
+        }
+
+        //Create new client array based on changes in swim lanes
+        const clientArray = {
+          backlog: thisBacklog,
+          inProgress: thisInProgress,
+          complete: thisComplete
+        }
+         
+        //Drake is unable to manipulate DOM, such that no conflicts with react dom
+        drake.cancel(true);
+
+        //Sets state with altered swimlanes
         this.setState({
-          backlog: clientsArray.filter(client => !client.status || client.status === 'backlog'),
-          inProgress: clientsArray.filter(client => client.status && client.status === 'in-progress'),
-          complete: clientsArray.filter(client => client.status && client.status === 'complete')
-        })
-
-        console.log('state after', this.state);
+            clients: clientArray
+        })       
 
       });
     }
@@ -128,18 +224,13 @@ export default class Board extends React.Component {
     }));
   }
 
-
-
   renderSwimlane(name, clients, ref, id) {
-
     return (
-      <Swimlane name={name} clients={clients} dragulaRef={ref} id={id}/>
+      <div><Swimlane name={name} clients={clients} dragulaRef={ref} id={id}/></div>
     );
   }
 
   render() {
-
-
     return (
       <div className="Board">
         <div className="container-fluid">
@@ -158,9 +249,4 @@ export default class Board extends React.Component {
       </div>
     );
   }
-
-  
-
- 
-  
 }
