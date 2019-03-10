@@ -1,0 +1,269 @@
+import React from 'react';
+import Dragula from 'dragula';
+import 'dragula/dist/dragula.css';
+import Swimlane from './Swimlane';
+import './Board.css';
+
+export default class Board extends React.Component {
+  constructor(props) {
+    super(props);
+    const clients = this.getClients();
+    this.state = {
+      clients: {
+        backlog: clients.filter(client => !client.status || client.status === 'backlog'),
+        inProgress: clients.filter(client => client.status && client.status === 'in-progress'),
+        complete: clients.filter(client => client.status && client.status === 'complete'),
+      }
+    };
+
+
+    //this.dragulaDecorator = this.dragulaDecorator.bind(this); //Binds the changes made by dragula
+
+
+    this.swimlanes = {
+      backlog: React.createRef(),
+      inProgress: React.createRef(),
+      complete: React.createRef(),
+    }
+
+  }
+
+  componentDidMount () {
+    const referencedArray = [ 
+      this.swimlanes.backlog.current, 
+      this.swimlanes.inProgress.current,
+      this.swimlanes.complete.current
+    ]
+    this.dragulaDecorator(referencedArray);
+    
+  };
+
+  componentDidUpdate(prevProps, prevState){
+    if(this.state.foo !== prevState.foo){
+      console.log('FOO')
+    } 
+  }
+
+  onChange(e) {
+    console.log('onchangee', e)
+  }
+
+
+  async dragulaDecorator(componentBackingInstance) {
+
+    const self = this;
+    //console.log('state', self.state);
+
+    if (componentBackingInstance) {
+      let options = { };
+      Dragula(componentBackingInstance, options).on('drop',(el, target, source, sibling) => {
+
+        console.log('element', el);
+
+        const sourceID = source.id;   //This is the source column ID
+        let   targetID = target.id;   //This is the target column ID
+        const movedId = el.id;        //This is the id of the element to be moved
+        console.log('movedID', movedId)
+        const siblingId = sibling.id  //This is the sibling ID (card after where card was moved to)
+
+        //console.log('sourceID', sourceID);
+
+        console.log('self state start', self.state);
+
+        const arrayOfSourceColumn = self.state.clients[sourceID];
+        //console.log('array of source column', arrayOfSourceColumn);
+        const arrayOfTargetColumn = self.state.clients[targetID];
+        //console.log('array of target column', arrayOfTargetColumn);
+        const movedCard =  self.state.clients[sourceID].find(aClient => aClient.id === movedId);
+       // console.log('moved card', movedCard);
+        const indexMovedCard = arrayOfSourceColumn.indexOf(movedCard);
+        //console.log('index moved card', indexMovedCard);
+        const siblingCard = self.state.clients[targetID].find(aClient => aClient.id === siblingId);
+        //console.log('sibling', siblingCard)                                                               //DOES NOT WORK IF END OF THE ARRAY
+        const indexSiblingCard = arrayOfTargetColumn.indexOf(siblingCard);
+        //console.log('index sibling card', indexSiblingCard);
+
+        if(sourceID !== targetID) {
+          //Copy the source array
+          const newSourceArray = self.state.clients[sourceID];
+
+          //Copy the target array
+          const newTargetArray = self.state.clients[targetID];
+
+          //Remove moved item from new array
+          newSourceArray.splice(indexMovedCard, 1);
+
+          //Insert moved item into target array before sibling index
+          newTargetArray.splice(indexSiblingCard, 0, movedCard);
+
+          console.log('this', this);
+
+
+
+          //DIFFERENT WAY >>>>> THIS WAY TAKES THE ACTUAL CLIENT ARRAY FROM GETCLIENTSARRAY() AND ALTERS THE CLIENT ARRAY BASED ON WHERE IT IS
+
+          //Get client array and position of the card to move
+          const clientsArray = this.getClients();
+          const clientPos = movedId-1;
+          console.log('clients array', clientsArray);
+          console.log('clients position', clientPos);
+
+          //Get card
+          const movedClient = clientsArray[clientPos];
+
+          console.log('moved client before', movedClient)
+
+          //Changes 'inProgress' to 'in-progress'
+          if (targetID === 'inProgress'){
+            targetID = 'in-progress'
+          }
+
+          //Changes status of the movedCient 
+          movedClient.status = targetID;
+
+          console.log('moved client after', movedClient)
+          console.log('clients array', clientsArray)
+
+          console.log('this', this);
+          console.log('source', source);
+
+
+          //THE PROBLEM HERE IS THAT THE NODE CHILDREN DONT WORK SINCE ITS DRAGULA (ALTERS DOM WITHOUT SETSTATE)
+          //Set the state
+          this.setState({
+            backlog: clientsArray.filter(client => !client.status || client.status === 'backlog'),
+            inProgress: clientsArray.filter(client => client.status && client.status === 'in-progress'),
+            complete: clientsArray.filter(client => client.status && client.status === 'complete')
+          })
+
+
+
+          //console.log(clients);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          // if(sourceID === 'backlog'){
+          //   if(targetID === 'inProgress'){
+          //     console.log('SOURCE TO TARGET')
+          //     self.setState({
+          //       clients:{
+          //         backlog: newSourceArray,
+          //         inProgress: newTargetArray
+          //       }
+          //     })
+          //   }
+          // } else {
+          //   console.log('NOT SOURCE TO TARGET')
+          // }
+
+          // console.log('self state end', self.state);
+
+          // const clientsState = {...self.state.clients}
+          // console.log('client other state', clientsState);
+          // console.log('other client state', self.state.clients[sourceID])
+
+          // console.log('self', self);
+
+
+          //self.setNewState();
+
+
+        } else {
+          //Move indexes of card to before sibling
+        }
+        // console.log('el id', el.id);
+        // console.log('target id', target);
+        // console.log('source id', source.id);
+      });
+    }
+  };
+
+
+
+  async setNewState(clientsArray) {
+    await this.setState({
+      backlog: clientsArray.filter(client => !client.status || client.status === 'backlog'),
+      inProgress: clientsArray.filter(client => client.status && client.status === 'in-progress'),
+      complete: clientsArray.filter(client => client.status && client.status === 'complete')
+    })
+  }
+
+
+
+  getClients() {
+    return [
+      ['1','Stark, White and Abbott','Cloned Optimal Architecture', 'in-progress'],
+      ['2','Wiza LLC','Exclusive Bandwidth-Monitored Implementation', 'complete'],
+      ['3','Nolan LLC','Vision-Oriented 4Thgeneration Graphicaluserinterface', 'backlog'],
+      ['4','Thompson PLC','Streamlined Regional Knowledgeuser', 'in-progress'],
+      ['5','Walker-Williamson','Team-Oriented 6Thgeneration Matrix', 'in-progress'],
+      ['6','Boehm and Sons','Automated Systematic Paradigm', 'backlog'],
+      ['7','Runolfsson, Hegmann and Block','Integrated Transitional Strategy', 'backlog'],
+      ['8','Schumm-Labadie','Operative Heuristic Challenge', 'backlog'],
+      ['9','Kohler Group','Re-Contextualized Multi-Tasking Attitude', 'backlog'],
+      ['10','Romaguera Inc','Managed Foreground Toolset', 'backlog'],
+      ['11','Reilly-King','Future-Proofed Interactive Toolset', 'complete'],
+      ['12','Emard, Champlin and Runolfsdottir','Devolved Needs-Based Capability', 'backlog'],
+      ['13','Fritsch, Cronin and Wolff','Open-Source 3Rdgeneration Website', 'complete'],
+      ['14','Borer LLC','Profit-Focused Incremental Orchestration', 'backlog'],
+      ['15','Emmerich-Ankunding','User-Centric Stable Extranet', 'in-progress'],
+      ['16','Willms-Abbott','Progressive Bandwidth-Monitored Access', 'in-progress'],
+      ['17','Brekke PLC','Intuitive User-Facing Customerloyalty', 'complete'],
+      ['18','Bins, Toy and Klocko','Integrated Assymetric Software', 'backlog'],
+      ['19','Hodkiewicz-Hayes','Programmable Systematic Securedline', 'backlog'],
+      ['20','Murphy, Lang and Ferry','Organized Explicit Access', 'backlog'],
+    ].map(companyDetails => ({
+      id: companyDetails[0],
+      name: companyDetails[1],
+      description: companyDetails[2],
+      status: companyDetails[3],
+    }));
+  }
+
+
+
+  renderSwimlane(name, clients, ref, id) {
+
+    return (
+      <Swimlane name={name} clients={clients} dragulaRef={ref} id={id}/>
+    );
+  }
+
+  render() {
+
+
+    return (
+      <div className="Board">
+        <div className="container-fluid">
+          <div className="row">
+            <div className="col-md-4" >
+              {this.renderSwimlane('Backlog', this.state.clients.backlog, this.swimlanes.backlog, 'backlog') }
+            </div>
+            <div className="col-md-4" >
+              {this.renderSwimlane('In Progress', this.state.clients.inProgress, this.swimlanes.inProgress, 'inProgress')}
+            </div>
+            <div className="col-md-4" >
+              {this.renderSwimlane('Complete', this.state.clients.complete, this.swimlanes.complete, 'complete')}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  
+
+ 
+  
+}
