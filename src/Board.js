@@ -94,9 +94,7 @@ export default class Board extends React.Component {
 
     if (componentBackingInstance) {
       drake.on('drop',(el, target, source, sibling) => {
-        console.log('element', el);
-        console.log('drake', drake);
-
+        
         let   sourceID = source.id;   //This is the source column ID
         let   targetID = target.id;   //This is the target column ID
         const movedId = el.id;        //This is the id of the element to be moved
